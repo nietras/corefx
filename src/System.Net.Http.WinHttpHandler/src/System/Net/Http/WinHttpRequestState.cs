@@ -40,7 +40,7 @@ namespace System.Net.Http
         {
             GCHandle stateHandle = GCHandle.FromIntPtr(gcHandle);
             return (WinHttpRequestState)stateHandle.Target;
-        }        
+        }
 
         public IntPtr ToIntPtr()
         {
@@ -66,6 +66,7 @@ namespace System.Net.Http
             TcsReceiveResponseHeaders = null;
             RequestMessage = null;
             Handler = null;
+            RequestHandle = null;
             ServerCertificateValidationCallback = null;
             TransportContext = null;
             Proxy = null;
@@ -122,6 +123,22 @@ namespace System.Net.Http
         public long? ExpectedBytesToRead { get; set; }
         public long CurrentBytesRead { get; set; }
 
+        // TODO (Issue 2505): temporary pinned buffer caches of 1 item. Will be replaced by PinnableBufferCache.
+        private GCHandle _cachedReceivePinnedBuffer = default(GCHandle);
+
+        public void PinReceiveBuffer(byte[] buffer)
+        {
+            if (!_cachedReceivePinnedBuffer.IsAllocated || _cachedReceivePinnedBuffer.Target != buffer)
+            {
+                if (_cachedReceivePinnedBuffer.IsAllocated)
+                {
+                    _cachedReceivePinnedBuffer.Free();
+                }
+
+                _cachedReceivePinnedBuffer = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+            }
+        }
+
         #region IDisposable Members
         private void Dispose(bool disposing)
         {
@@ -146,7 +163,17 @@ namespace System.Net.Http
 
             if (_operationHandle.IsAllocated)
             {
+                // This method only gets called when the WinHTTP request handle is fully closed and thus all
+                // async operations are done. So, it is safe at this point to unpin the buffers and release
+                // the strong GCHandle for this object.
+                if (_cachedReceivePinnedBuffer.IsAllocated)
+                {
+                    _cachedReceivePinnedBuffer.Free();
+                    _cachedReceivePinnedBuffer = default(GCHandle);
+                }
+
                 _operationHandle.Free();
+                _operationHandle = default(GCHandle);
             }
         }
 
