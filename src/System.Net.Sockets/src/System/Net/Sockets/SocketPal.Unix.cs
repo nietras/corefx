@@ -25,115 +25,7 @@ namespace System.Net.Sockets
 
         public static SocketError GetSocketErrorForErrorCode(Interop.Error errorCode)
         {
-            // NOTE: SocketError values with no direct mapping have been omitted for now.
-            //
-            //       These values are:
-            //       - SocketError.SocketNotSupported
-            //       - SocketError.OperationNotSupported
-            //       - SocketError.ProtocolFamilyNotSupported
-            //       - SocketError.NoBufferSpaceAvailable
-            //       - SocketError.HostDown
-            //       - SocketError.ProcessLimit
-            //
-            //        Although they are not present in this mapping, SocketError.IOPending and
-            //        SocketError.OperationAborted are returned directly methods on
-            //        SocketAsyncContext (these errors are only relevant for async I/O).
-
-            switch (errorCode)
-            {
-                case Interop.Error.SUCCESS:
-                    return SocketError.Success;
-
-                case Interop.Error.EINTR:
-                    return SocketError.Interrupted;
-
-                case Interop.Error.EACCES:
-                    return SocketError.AccessDenied;
-
-                case Interop.Error.EFAULT:
-                    return SocketError.Fault;
-
-                case Interop.Error.EBADF:
-                case Interop.Error.EINVAL:
-                    return SocketError.InvalidArgument;
-
-                case Interop.Error.EMFILE:
-                case Interop.Error.ENFILE:
-                    return SocketError.TooManyOpenSockets;
-
-                case Interop.Error.EAGAIN:
-                    return SocketError.WouldBlock;
-
-                case Interop.Error.EINPROGRESS:
-                    return SocketError.InProgress;
-
-                case Interop.Error.EALREADY:
-                    return SocketError.AlreadyInProgress;
-
-                case Interop.Error.ENOTSOCK:
-                    return SocketError.NotSocket;
-
-                case Interop.Error.EDESTADDRREQ:
-                    return SocketError.DestinationAddressRequired;
-
-                case Interop.Error.EMSGSIZE:
-                    return SocketError.MessageSize;
-
-                case Interop.Error.EPROTOTYPE:
-                    return SocketError.ProtocolType;
-
-                case Interop.Error.ENOPROTOOPT:
-                case Interop.Error.ENOTSUP:
-                    return SocketError.ProtocolOption;
-
-                case Interop.Error.EPROTONOSUPPORT:
-                    return SocketError.ProtocolNotSupported;
-
-                case Interop.Error.EAFNOSUPPORT:
-                    return SocketError.AddressFamilyNotSupported;
-
-                case Interop.Error.EADDRINUSE:
-                    return SocketError.AddressAlreadyInUse;
-
-                case Interop.Error.EADDRNOTAVAIL:
-                    return SocketError.AddressNotAvailable;
-
-                case Interop.Error.ENETDOWN:
-                    return SocketError.NetworkDown;
-
-                case Interop.Error.ENETUNREACH:
-                    return SocketError.NetworkUnreachable;
-
-                case Interop.Error.ENETRESET:
-                    return SocketError.NetworkReset;
-
-                case Interop.Error.ECONNABORTED:
-                    return SocketError.ConnectionAborted;
-
-                case Interop.Error.ECONNRESET:
-                    return SocketError.ConnectionReset;
-
-                case Interop.Error.EISCONN:
-                    return SocketError.IsConnected;
-
-                case Interop.Error.ENOTCONN:
-                    return SocketError.NotConnected;
-
-                case Interop.Error.ETIMEDOUT:
-                    return SocketError.TimedOut;
-
-                case Interop.Error.ECONNREFUSED:
-                    return SocketError.ConnectionRefused;
-
-                case Interop.Error.EHOSTUNREACH:
-                    return SocketError.HostUnreachable;
-
-                case Interop.Error.EPIPE:
-                    return SocketError.Shutdown;
-
-                default:
-                    return SocketError.SocketError;
-            }
+            return SocketErrorPal.GetSocketErrorForNativeError(errorCode);
         }
 
         private static unsafe IPPacketInformation GetIPPacketInformation(Interop.Sys.MessageHeader* messageHeader, bool isIPv4, bool isIPv6)
@@ -159,7 +51,7 @@ namespace System.Net.Sockets
 
         private static unsafe int Receive(SafeCloseSocket socket, SocketFlags flags, int available, byte[] buffer, int offset, int count, byte[] socketAddress, ref int socketAddressLen, out SocketFlags receivedFlags, out Interop.Error errno)
         {
-            Debug.Assert(socketAddress != null || socketAddressLen == 0);
+            Debug.Assert(socketAddress != null || socketAddressLen == 0, $"Unexpected values: socketAddress={socketAddress}, socketAddressLen={socketAddressLen}");
 
             long received;
 
@@ -262,7 +154,7 @@ namespace System.Net.Sockets
                 for (int i = 0; i < maxBuffers; i++, startOffset = 0)
                 {
                     ArraySegment<byte> buffer = buffers[startIndex + i];
-                    Debug.Assert(buffer.Offset + startOffset < buffer.Array.Length);
+                    Debug.Assert(buffer.Offset + startOffset < buffer.Array.Length, $"Unexpected values: Offset={buffer.Offset}, startOffset={startOffset}, Length={buffer.Array.Length}");
 
                     handles[i] = GCHandle.Alloc(buffer.Array, GCHandleType.Pinned);
                     iovecs[i].Base = &((byte*)handles[i].AddrOfPinnedObject())[buffer.Offset + startOffset];
@@ -399,7 +291,7 @@ namespace System.Net.Sockets
 
         private static unsafe int ReceiveMessageFrom(SafeCloseSocket socket, SocketFlags flags, int available, byte[] buffer, int offset, int count, byte[] socketAddress, ref int socketAddressLen, bool isIPv4, bool isIPv6, out SocketFlags receivedFlags, out IPPacketInformation ipPacketInformation, out Interop.Error errno)
         {
-            Debug.Assert(socketAddress != null);
+            Debug.Assert(socketAddress != null, "Expected non-null socketAddress");
 
             int cmsgBufferLen = Interop.Sys.GetControlMessageBufferSize(isIPv4, isIPv6);
             var cmsgBuffer = stackalloc byte[cmsgBufferLen];
@@ -466,7 +358,7 @@ namespace System.Net.Sockets
 
             if (errno == Interop.Error.SUCCESS)
             {
-                Debug.Assert(fd != -1);
+                Debug.Assert(fd != -1, "Expected fd != -1");
 
                 socketAddressLen = sockAddrLen;
                 errorCode = SocketError.Success;
@@ -488,8 +380,8 @@ namespace System.Net.Sockets
 
         public static unsafe bool TryStartConnect(SafeCloseSocket socket, byte[] socketAddress, int socketAddressLen, out SocketError errorCode)
         {
-            Debug.Assert(socketAddress != null);
-            Debug.Assert(socketAddressLen > 0);
+            Debug.Assert(socketAddress != null, "Expected non-null socketAddress");
+            Debug.Assert(socketAddressLen > 0, $"Unexpected socketAddressLen: {socketAddressLen}");
 
             Interop.Error err;
             fixed (byte* rawSocketAddress = socketAddress)
@@ -530,7 +422,7 @@ namespace System.Net.Sockets
 
             if (err != Interop.Error.SUCCESS)
             {
-                Debug.Assert(err == Interop.Error.EBADF);
+                Debug.Assert(err == Interop.Error.EBADF, $"Unexpected err: {err}");
                 errorCode = SocketError.SocketError;
                 return true;
             }
@@ -988,15 +880,17 @@ namespace System.Net.Sockets
 
         public static unsafe SocketError SetMulticastOption(SafeCloseSocket handle, SocketOptionName optionName, MulticastOption optionValue)
         {
-            Debug.Assert(optionName == SocketOptionName.AddMembership || optionName == SocketOptionName.DropMembership);
+            Debug.Assert(optionName == SocketOptionName.AddMembership || optionName == SocketOptionName.DropMembership, $"Unexpected optionName: {optionName}");
 
             Interop.Sys.MulticastOption optName = optionName == SocketOptionName.AddMembership ?
                 Interop.Sys.MulticastOption.MULTICAST_ADD :
                 Interop.Sys.MulticastOption.MULTICAST_DROP;
 
+            IPAddress localAddress = optionValue.LocalAddress ?? IPAddress.Any;
+
             var opt = new Interop.Sys.IPv4MulticastOption {
                 MulticastAddress = unchecked((uint)optionValue.Group.GetAddress()),
-                LocalAddress = unchecked((uint)optionValue.LocalAddress.GetAddress()),
+                LocalAddress = unchecked((uint)localAddress.GetAddress()),
                 InterfaceIndex = optionValue.InterfaceIndex
             };
 
@@ -1006,7 +900,7 @@ namespace System.Net.Sockets
 
         public static unsafe SocketError SetIPv6MulticastOption(SafeCloseSocket handle, SocketOptionName optionName, IPv6MulticastOption optionValue)
         {
-            Debug.Assert(optionName == SocketOptionName.AddMembership || optionName == SocketOptionName.DropMembership);
+            Debug.Assert(optionName == SocketOptionName.AddMembership || optionName == SocketOptionName.DropMembership, $"Unexpected optionName={optionName}");
 
             Interop.Sys.MulticastOption optName = optionName == SocketOptionName.AddMembership ?
                 Interop.Sys.MulticastOption.MULTICAST_ADD :
@@ -1095,7 +989,7 @@ namespace System.Net.Sockets
 
         public static unsafe SocketError GetMulticastOption(SafeCloseSocket handle, SocketOptionName optionName, out MulticastOption optionValue)
         {
-            Debug.Assert(optionName == SocketOptionName.AddMembership || optionName == SocketOptionName.DropMembership);
+            Debug.Assert(optionName == SocketOptionName.AddMembership || optionName == SocketOptionName.DropMembership, $"Unexpected optionName={optionName}");
 
             Interop.Sys.MulticastOption optName = optionName == SocketOptionName.AddMembership ?
                 Interop.Sys.MulticastOption.MULTICAST_ADD :
@@ -1120,7 +1014,7 @@ namespace System.Net.Sockets
 
         public static unsafe SocketError GetIPv6MulticastOption(SafeCloseSocket handle, SocketOptionName optionName, out IPv6MulticastOption optionValue)
         {
-            Debug.Assert(optionName == SocketOptionName.AddMembership || optionName == SocketOptionName.DropMembership);
+            Debug.Assert(optionName == SocketOptionName.AddMembership || optionName == SocketOptionName.DropMembership, $"Unexpected optionName={optionName}");
 
             Interop.Sys.MulticastOption optName = optionName == SocketOptionName.AddMembership ?
                 Interop.Sys.MulticastOption.MULTICAST_ADD :
@@ -1336,7 +1230,7 @@ namespace System.Net.Sockets
 
         public static SocketError AcceptAsync(Socket socket, SafeCloseSocket handle, SafeCloseSocket acceptHandle, int receiveSize, int socketAddressSize, AcceptOverlappedAsyncResult asyncResult)
         {
-            Debug.Assert(acceptHandle == null);
+            Debug.Assert(acceptHandle == null, $"Unexpected acceptHandle: {acceptHandle}");
 
             byte[] socketAddressBuffer = new byte[socketAddressSize];
 
