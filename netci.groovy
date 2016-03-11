@@ -223,7 +223,7 @@ branchList.each { branchName ->
             
             // Set the affinity.  Use the 'latest or auto' version to pick up
             // new auto images.
-            Utilities.setMachineAffinity(newNativeCompJob, os, 'latest-or-auto')
+            Utilities.setMachineAffinity(newNativeCompJob, os, 'outer-latest-or-auto')
             // Set up standard options.
             Utilities.standardJobSetup(newNativeCompJob, project, isPR, getFullBranchName(branchName))
             // Add archival for the built data.
@@ -308,6 +308,7 @@ branchList.each { branchName ->
                         --coreclr-bins \${WORKSPACE}/bin/Product/${osGroup}.x64.Release/ \\
                         --mscorlib-bins \${WORKSPACE}/bin/Product/${osGroup}.x64.Release/ \\
                         --outerloop
+                    sudo find . -name \"testResults.xml\" -exec chmod 777 {} \\;
                     """)
                 }
                 
