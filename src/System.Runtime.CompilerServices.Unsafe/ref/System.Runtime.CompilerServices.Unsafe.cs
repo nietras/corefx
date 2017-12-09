@@ -19,7 +19,10 @@ namespace System.Runtime.CompilerServices
         public static ref readonly T SubtractReadOnly<T>(in T source, int elementOffset) { throw null; }
         public static ref readonly T SubtractReadOnly<T>(in T source, System.IntPtr elementOffset) { throw null; }
 
-        // Consider changing existing (problem this will not require `ref` when using do the `in` which makes it a bit weird
+        // Consider changing existing 
+        // (problem this will not require `ref` 
+        //  when using due to `in` not requiring it, 
+        //  which makes it a bit weird)
         public static bool AreSame<T>(in T left, in T right) { throw null; }
         public static System.IntPtr ByteOffset<T>(in T origin, in T target) { throw null; }
         public static void CopyBlock(ref byte destination, in byte source, uint byteCount) { }
